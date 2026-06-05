@@ -6,6 +6,8 @@
 <title>Calmex Field Tracker</title>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<script src="https://accounts.google.com/gsi/client" async defer></script>
+<script src="https://apis.google.com/js/api.js"></script>
 <style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
 :root{
@@ -147,9 +149,20 @@ body{font-family:var(--font);background:var(--bg);color:var(--text);font-size:15
 </head>
 <body>
 
+<div id="auth-overlay" style="position:fixed;inset:0;background:#1a1814;display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:9999;gap:20px;padding:32px;">
+  <div style="font-family:var(--mono);font-size:11px;color:#fff;letter-spacing:.06em;text-transform:uppercase;text-align:center;line-height:1.6;">Calmex Field Tracker<br><span style="color:rgba(255,255,255,0.4);font-size:10px;">City of Redondo Beach · Residential Rehab Cycle 2 Phase 5</span></div>
+  <p style="font-size:13px;color:rgba(255,255,255,0.5);max-width:300px;text-align:center;line-height:1.6;">Sign in with Google to load and save your progress payment data.</p>
+  <button id="sign-in-btn" style="display:flex;align-items:center;gap:10px;padding:14px 28px;background:#fff;border:none;border-radius:8px;font-family:var(--font);font-size:14px;font-weight:500;cursor:pointer;color:#1a1814;">
+    <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" style="width:20px;height:20px;" alt="">
+    Sign in with Google
+  </button>
+  <span id="auth-status" style="font-family:var(--mono);font-size:11px;color:rgba(255,255,255,0.35);text-align:center;">Loading...</span>
+</div>
+
 <div class="top-bar">
   <h1>Calmex — Redondo Beach<br>Field Tracker</h1>
   <span class="save-pill saved" id="save-pill">Ready</span>
+  <button id="sign-out-btn" onclick="signOut()" style="display:none;font-family:var(--mono);font-size:10px;padding:3px 9px;border-radius:12px;border:1px solid rgba(255,255,255,0.2);background:transparent;color:rgba(255,255,255,0.45);cursor:pointer;">Sign out</button>
 </div>
 
 <!-- Entry screen -->
@@ -337,19 +350,104 @@ const LS_PREFIX = 'calmex_';
 // ── State ─────────────────────────────────────────────────────────────────────
 let curPP = 0, curSection = 'All';
 
+// ── Google Drive config ───────────────────────────────────────────────────────
+const CLIENT_ID = 'YOUR_GOOGLE_CLIENT_ID_HERE';
+const SCOPES = 'https://www.googleapis.com/auth/drive.file';
+const DATA_FILENAME = 'calmex_tracker_data.json';
+let tokenClient, accessToken = null, driveFileId = null;
+let appData = {};  // { "B1_pp0": 123, ... }
+let driveSaveTimer = null;
+
+// ── Auth ──────────────────────────────────────────────────────────────────────
+function initAuth() {
+  if (CLIENT_ID === 'YOUR_GOOGLE_CLIENT_ID_HERE') {
+    document.getElementById('auth-status').textContent = '⚠ No Client ID configured';
+    document.getElementById('sign-in-btn').disabled = true; return;
+  }
+  document.getElementById('auth-status').textContent = 'Ready';
+  gapi.load('client', async () => {
+    await gapi.client.init({ discoveryDocs: ['https://www.googleapis.com/discovery/v1/apis/drive/v3/rest'] });
+    tokenClient = google.accounts.oauth2.initTokenClient({
+      client_id: CLIENT_ID, scope: SCOPES,
+      callback: async (resp) => {
+        if (resp.error) { setSavePill('error', 'Auth error'); return; }
+        accessToken = resp.access_token;
+        gapi.client.setToken({ access_token: accessToken });
+        await onSignedIn();
+      }
+    });
+    document.getElementById('sign-in-btn').onclick = () => {
+      document.getElementById('auth-status').textContent = 'Signing in…';
+      tokenClient.requestAccessToken({ prompt: 'consent' });
+    };
+  });
+}
+async function onSignedIn() {
+  document.getElementById('auth-overlay').style.display = 'none';
+  document.getElementById('sign-out-btn').style.display = 'block';
+  setSavePill('saving', 'Loading…');
+  await loadFromDrive();
+  renderAll();
+}
+function signOut() {
+  google.accounts.oauth2.revoke(accessToken, () => {
+    accessToken = null; driveFileId = null; appData = {};
+    document.getElementById('auth-overlay').style.display = 'flex';
+    document.getElementById('sign-out-btn').style.display = 'none';
+    document.getElementById('auth-status').textContent = 'Signed out';
+  });
+}
+async function loadFromDrive() {
+  try {
+    const res = await gapi.client.drive.files.list({
+      q: `name='${DATA_FILENAME}' and trashed=false`, spaces: 'drive', fields: 'files(id,name)'
+    });
+    const files = res.result.files;
+    if (files && files.length > 0) {
+      driveFileId = files[0].id;
+      const c = await gapi.client.drive.files.get({ fileId: driveFileId, alt: 'media' });
+      appData = JSON.parse(c.body) || {};
+      setSavePill('saved', 'Loaded ✓');
+    } else { appData = {}; setSavePill('saved', 'New file'); }
+  } catch(e) { appData = {}; setSavePill('error', 'Load error'); }
+}
+async function saveToDrive() {
+  setSavePill('saving', 'Saving…');
+  const blob = new Blob([JSON.stringify(appData)], { type: 'application/json' });
+  try {
+    if (driveFileId) {
+      await fetch(`https://www.googleapis.com/upload/drive/v3/files/${driveFileId}?uploadType=media`, {
+        method: 'PATCH', headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' }, body: blob
+      });
+    } else {
+      const meta = JSON.stringify({ name: DATA_FILENAME, mimeType: 'application/json' });
+      const form = new FormData();
+      form.append('metadata', new Blob([meta], { type: 'application/json' }));
+      form.append('file', blob);
+      const res = await fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart', {
+        method: 'POST', headers: { Authorization: `Bearer ${accessToken}` }, body: form
+      });
+      driveFileId = (await res.json()).id;
+    }
+    const t = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    setSavePill('saved', `Saved ${t}`);
+  } catch(e) { setSavePill('error', 'Save failed'); }
+}
+function scheduleSave() { clearTimeout(driveSaveTimer); driveSaveTimer = setTimeout(saveToDrive, 1200); }
+function setSavePill(cls, txt) { const el = document.getElementById('save-pill'); el.className = 'save-pill ' + cls; el.textContent = txt; }
+
 // ── Storage ───────────────────────────────────────────────────────────────────
-function lsKey(itemId, pp) { return `${LS_PREFIX}${itemId}_pp${pp}`; }
-function getVal(itemId, pp) { const v = localStorage.getItem(lsKey(itemId, pp)); return v !== null ? parseFloat(v) : null; }
-function setVal(itemId, pp, v) { const k = lsKey(itemId, pp); if (v === null || v === '' || isNaN(v)) localStorage.removeItem(k); else localStorage.setItem(k, v); }
+function lsKey(itemId, pp) { return `${itemId}_pp${pp}`; }
+function getVal(itemId, pp) { const v = appData[lsKey(itemId, pp)]; return v !== undefined ? v : null; }
+function setVal(itemId, pp, v) { const k = lsKey(itemId, pp); if (v === null || v === '' || isNaN(v)) delete appData[k]; else appData[k] = v; }
 function getTotalInstalled(itemId) { let t = 0; for (let p = 0; p < PP_COUNT; p++) { const v = getVal(itemId, p); if (v !== null) t += v; } return t; }
 function getContractTotal(item) { return item.qty * item.unitCost; }
 
 let saveTimer;
 function flashSaved() {
-  const el = document.getElementById('save-pill');
-  el.className = 'save-pill saved'; el.textContent = 'Saved ✓';
+  setSavePill('saving', 'Unsaved…');
   clearTimeout(saveTimer);
-  saveTimer = setTimeout(() => { el.className = 'save-pill'; el.textContent = 'Auto-save on'; }, 2000);
+  saveTimer = setTimeout(() => scheduleSave(), 100);
 }
 
 // ── Fund label HTML ───────────────────────────────────────────────────────────
@@ -486,8 +584,6 @@ function renderSummaryPage() {
 }
 
 function renderSettingsPage() {
-  let bytes=0,count=0;
-  for(let k in localStorage){if(k.startsWith(LS_PREFIX)){bytes+=localStorage[k].length*2;count++;}}
   document.getElementById('settings-page').innerHTML = `
     <div class="set-section">
       <div class="set-title">Export</div>
@@ -511,7 +607,7 @@ function renderSettingsPage() {
       <div class="set-title">Data</div>
       <div class="set-card">
         <div class="set-row">
-          <div><div class="set-row-label">Storage used</div><div class="set-row-sub">${count} entries · ${(bytes/1024).toFixed(1)} KB</div></div>
+          <div><div class="set-row-label">Storage</div><div class="set-row-sub">${Object.keys(appData).length} entries saved to Google Drive</div></div>
         </div>
         <div class="set-row">
           <div><div class="set-row-label">Clear all data</div><div class="set-row-sub">Permanently delete all entries</div></div>
@@ -583,10 +679,8 @@ function showScreen(name) {
 
 // ── Export JSON backup ────────────────────────────────────────────────────────
 function exportJSON() {
-  const data = {};
-  for (let k in localStorage) { if (k.startsWith(LS_PREFIX)) data[k.replace(LS_PREFIX,'')] = localStorage[k]; }
   const a = document.createElement('a');
-  a.href = URL.createObjectURL(new Blob([JSON.stringify(data,null,2)],{type:'application/json'}));
+  a.href = URL.createObjectURL(new Blob([JSON.stringify(appData,null,2)],{type:'application/json'}));
   a.download = `calmex_backup_${new Date().toISOString().slice(0,10)}.json`;
   a.click();
 }
@@ -595,7 +689,8 @@ function importJSON(input) {
   reader.onload = e => {
     try {
       const data = JSON.parse(e.target.result); let count=0;
-      for (let k in data) { localStorage.setItem(LS_PREFIX+k, data[k]); count++; }
+      for (let k in data) { appData[k] = data[k]; count++; }
+      saveToDrive();
       alert(`Imported ${count} entries.`); renderAll();
     } catch { alert('Import failed — invalid file.'); }
   };
@@ -603,8 +698,7 @@ function importJSON(input) {
 }
 function clearAll() {
   if (!confirm('Delete ALL tracking data? This cannot be undone.')) return;
-  Object.keys(localStorage).filter(k=>k.startsWith(LS_PREFIX)).forEach(k=>localStorage.removeItem(k));
-  renderAll(); renderSettingsPage();
+  appData = {}; saveToDrive(); renderAll(); renderSettingsPage();
 }
 
 // ── Export XLSX ───────────────────────────────────────────────────────────────
@@ -715,7 +809,14 @@ function exportXLSX() {
 }
 
 // ── Init ──────────────────────────────────────────────────────────────────────
-renderAll();
+window.onload = () => {
+  const check = setInterval(() => {
+    if (typeof google !== 'undefined' && google.accounts) {
+      clearInterval(check); initAuth();
+    }
+  }, 150);
+  setTimeout(() => { clearInterval(check); }, 8000);
+};
 </script>
 </body>
 </html>
