@@ -1,0 +1,721 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<title>Calmex Field Tracker</title>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
+:root{
+  --bg:#f4f1eb;--surface:#fff;--surface2:#f9f7f3;
+  --border:#e0dbd2;--border2:#c9c3b8;
+  --text:#1a1814;--text2:#6b6560;--text3:#9c9590;
+  --accent:#2a5caa;--accent-light:#e8eefc;
+  --warn:#b85c00;--danger:#b83232;--danger-light:#fdeaea;
+  --success:#1d7a4a;--success-light:#e8f7ef;
+  --fund-res:#2a5caa;--fund-em:#7b3fa0;--fund-def:#b85c00;
+  --fund-alley:#1d7a4a;--fund-tc:#b83232;
+  --font:'IBM Plex Sans',sans-serif;--mono:'IBM Plex Mono',monospace;
+  --radius:8px;--header:52px;
+}
+html,body{height:100%;overflow:hidden;}
+body{font-family:var(--font);background:var(--bg);color:var(--text);font-size:15px;display:flex;flex-direction:column;}
+
+.top-bar{height:var(--header);background:var(--text);color:#fff;display:flex;align-items:center;justify-content:space-between;padding:0 16px;flex-shrink:0;z-index:50;}
+.top-bar h1{font-family:var(--mono);font-size:11px;font-weight:500;letter-spacing:.05em;text-transform:uppercase;color:#fff;line-height:1.3;}
+.save-pill{font-family:var(--mono);font-size:11px;padding:3px 9px;border-radius:20px;border:1px solid rgba(255,255,255,0.2);color:rgba(255,255,255,0.4);transition:all .3s;white-space:nowrap;}
+.save-pill.saved{color:#5cd18a;border-color:#5cd18a;}
+
+/* PP strip */
+.pp-strip{height:48px;background:var(--surface);border-bottom:1px solid var(--border);display:flex;align-items:center;padding:0 12px;gap:8px;overflow-x:auto;flex-shrink:0;scrollbar-width:none;}
+.pp-strip::-webkit-scrollbar{display:none;}
+.pp-chip{flex-shrink:0;display:flex;flex-direction:column;align-items:center;padding:5px 14px;border-radius:20px;border:1px solid var(--border);background:var(--surface2);font-family:var(--mono);font-size:11px;color:var(--text2);cursor:pointer;-webkit-tap-highlight-color:transparent;transition:all .12s;white-space:nowrap;}
+.pp-chip .pp-sub{font-size:9px;color:var(--text3);margin-top:1px;}
+.pp-chip.active{background:var(--accent);border-color:var(--accent);color:#fff;font-weight:500;}
+.pp-chip.active .pp-sub{color:rgba(255,255,255,0.7);}
+
+/* Section strip */
+.section-strip{height:40px;background:var(--surface2);border-bottom:1px solid var(--border);display:flex;align-items:center;padding:0 12px;gap:8px;flex-shrink:0;}
+.section-chip{padding:4px 14px;border-radius:20px;border:1px solid var(--border);background:var(--surface);font-size:12px;color:var(--text2);cursor:pointer;-webkit-tap-highlight-color:transparent;transition:all .12s;white-space:nowrap;}
+.section-chip.active{background:var(--text);border-color:var(--text);color:#fff;font-weight:500;}
+
+/* Summary cards */
+.summary-row{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;padding:10px 12px;flex-shrink:0;}
+.s-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:8px 10px;}
+.s-card .lbl{font-family:var(--mono);font-size:9px;text-transform:uppercase;letter-spacing:.06em;color:var(--text3);margin-bottom:2px;}
+.s-card .val{font-family:var(--mono);font-size:16px;font-weight:500;color:var(--text);}
+.s-card.accent .val{color:var(--accent);}
+.s-card.success .val{color:var(--success);}
+.s-card.warn .val{color:var(--warn);}
+
+/* Item list */
+.item-list{flex:1;overflow-y:auto;padding:0 12px 80px;-webkit-overflow-scrolling:touch;}
+
+/* Section header */
+.section-header{
+  font-family:var(--mono);font-size:10px;font-weight:500;text-transform:uppercase;
+  letter-spacing:.07em;background:var(--text);color:#fff;
+  padding:7px 12px;margin:8px -12px 0;
+}
+
+.item-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);margin-bottom:8px;overflow:hidden;transition:border-color .15s;}
+.item-card.has-entry{border-color:#b3caed;background:var(--accent-light);}
+.item-card.is-done{border-color:#7ccd9e;}
+.item-card.is-over{border-color:var(--danger);background:var(--danger-light);}
+
+.item-top{display:flex;align-items:flex-start;gap:8px;padding:10px 12px 6px;}
+.item-no{font-family:var(--mono);font-size:10px;color:var(--text3);background:var(--surface2);border:1px solid var(--border);border-radius:4px;padding:2px 5px;flex-shrink:0;margin-top:2px;}
+.item-desc{font-size:12px;line-height:1.4;color:var(--text);flex:1;}
+.item-meta{font-family:var(--mono);font-size:10px;color:var(--text3);display:block;margin-top:3px;}
+
+/* Fund tag */
+.fund-tag{display:inline-block;font-family:var(--mono);font-size:9px;padding:1px 6px;border-radius:3px;margin-top:3px;color:#fff;}
+.fund-res{background:var(--fund-res);}
+.fund-em{background:var(--fund-em);}
+.fund-def{background:var(--fund-def);}
+.fund-alley{background:var(--fund-alley);}
+.fund-tc{background:var(--fund-tc);}
+.fund-split{background:var(--text2);}
+
+.item-input-row{padding:6px 12px 8px;border-top:1px solid var(--border);display:flex;align-items:center;gap:8px;}
+.pp-input-label{font-family:var(--mono);font-size:10px;text-transform:uppercase;letter-spacing:.04em;color:var(--text3);flex-shrink:0;}
+.pp-big-input{flex:1;height:44px;border:1.5px solid var(--border2);border-radius:var(--radius);background:var(--bg);color:var(--text);font-family:var(--mono);font-size:20px;font-weight:500;text-align:center;padding:0 8px;-webkit-appearance:none;appearance:none;transition:border-color .12s,background .12s;}
+.pp-big-input:focus{outline:none;border-color:var(--accent);background:#fff;box-shadow:0 0 0 3px var(--accent-light);}
+.pp-big-input.filled{background:var(--accent-light);border-color:#7aaee0;}
+.pp-big-input.over{background:var(--danger-light);border-color:var(--danger);}
+.contract-badge{font-family:var(--mono);font-size:10px;color:var(--text3);background:var(--surface2);border:1px solid var(--border);border-radius:4px;padding:3px 7px;white-space:nowrap;flex-shrink:0;text-align:center;}
+
+.prog-wrap{height:3px;background:var(--border);margin:0 12px 8px;border-radius:2px;}
+.prog-fill{height:100%;border-radius:2px;background:var(--accent);transition:width .3s;}
+.prog-fill.full{background:var(--success);}
+.prog-fill.over{background:var(--danger);}
+
+.item-stats{display:flex;border-top:1px solid var(--border);}
+.stat-cell{flex:1;padding:6px 8px;text-align:center;border-right:1px solid var(--border);}
+.stat-cell:last-child{border-right:none;}
+.stat-cell .sl{font-family:var(--mono);font-size:9px;text-transform:uppercase;letter-spacing:.04em;color:var(--text3);display:block;}
+.stat-cell .sv{font-family:var(--mono);font-size:12px;font-weight:500;color:var(--text);display:block;}
+.stat-cell .sv.done{color:var(--success);}
+.stat-cell .sv.partial{color:var(--warn);}
+.stat-cell .sv.over{color:var(--danger);}
+
+/* Bottom nav */
+.bottom-nav{position:fixed;bottom:0;left:0;right:0;height:56px;background:var(--surface);border-top:1px solid var(--border);display:flex;z-index:40;}
+.nav-btn{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;border:none;background:none;cursor:pointer;font-family:var(--font);font-size:10px;color:var(--text3);-webkit-tap-highlight-color:transparent;transition:color .12s;padding-bottom:env(safe-area-inset-bottom);}
+.nav-btn.active{color:var(--accent);}
+.nav-btn svg{width:22px;height:22px;stroke-width:1.5;fill:none;stroke:currentColor;}
+
+/* Summary page */
+.summary-page{flex:1;overflow-y:auto;padding:12px 12px 80px;}
+.sum-section-hdr{font-family:var(--mono);font-size:10px;font-weight:500;text-transform:uppercase;letter-spacing:.07em;color:#fff;background:var(--text);padding:7px 12px;margin:12px -12px 8px;}
+.fund-section-hdr{font-family:var(--mono);font-size:10px;font-weight:500;text-transform:uppercase;letter-spacing:.06em;color:var(--text3);padding:12px 0 6px;}
+
+.sum-fund-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:12px;margin-bottom:10px;}
+.sum-fund-name{font-size:13px;font-weight:600;color:var(--text);margin-bottom:8px;}
+.sum-fund-row{display:flex;justify-content:space-between;align-items:center;padding:3px 0;border-bottom:1px solid var(--border);font-size:12px;}
+.sum-fund-row:last-child{border-bottom:none;}
+.sum-fund-row .lbl{color:var(--text2);}
+.sum-fund-row .amt{font-family:var(--mono);font-weight:500;}
+.sum-fund-row .amt.done{color:var(--success);}
+.sum-fund-row .amt.warn{color:var(--warn);}
+
+.pp-summary-row{display:flex;gap:6px;overflow-x:auto;margin-bottom:10px;scrollbar-width:none;}
+.pp-summary-row::-webkit-scrollbar{display:none;}
+.pp-mini-card{flex-shrink:0;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:8px 10px;min-width:80px;text-align:center;}
+.pp-mini-card .pml{font-family:var(--mono);font-size:9px;text-transform:uppercase;color:var(--text3);display:block;}
+.pp-mini-card .pmv{font-family:var(--mono);font-size:13px;font-weight:500;color:var(--text);display:block;}
+.pp-mini-card.has-data{background:var(--accent-light);border-color:#b3caed;}
+
+/* Settings */
+.settings-page{flex:1;overflow-y:auto;padding:16px 12px 80px;}
+.set-section{margin-bottom:20px;}
+.set-title{font-family:var(--mono);font-size:10px;text-transform:uppercase;letter-spacing:.07em;color:var(--text3);margin-bottom:8px;}
+.set-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);overflow:hidden;}
+.set-row{display:flex;align-items:center;justify-content:space-between;padding:13px 16px;border-bottom:1px solid var(--border);}
+.set-row:last-child{border-bottom:none;}
+.set-row-label{font-size:13px;color:var(--text);}
+.set-row-sub{font-size:11px;color:var(--text3);margin-top:2px;}
+.set-btn{padding:7px 14px;border-radius:var(--radius);border:1px solid var(--border2);background:var(--surface2);font-family:var(--font);font-size:12px;font-weight:500;cursor:pointer;color:var(--text);-webkit-tap-highlight-color:transparent;}
+.set-btn.danger{color:var(--danger);border-color:var(--danger);}
+.set-btn.success{color:#fff;background:var(--success);border-color:var(--success);}
+
+.screen{display:none;flex-direction:column;flex:1;overflow:hidden;}
+.screen.active{display:flex;}
+</style>
+</head>
+<body>
+
+<div class="top-bar">
+  <h1>Calmex — Redondo Beach<br>Field Tracker</h1>
+  <span class="save-pill saved" id="save-pill">Ready</span>
+</div>
+
+<!-- Entry screen -->
+<div class="screen active" id="screen-entry">
+  <div class="pp-strip" id="pp-strip"></div>
+  <div class="section-strip" id="section-strip"></div>
+  <div class="summary-row" id="summary-row"></div>
+  <div class="item-list" id="item-list"></div>
+</div>
+
+<!-- Summary screen -->
+<div class="screen" id="screen-summary">
+  <div class="summary-page" id="summary-page"></div>
+</div>
+
+<!-- Settings screen -->
+<div class="screen" id="screen-settings">
+  <div class="settings-page" id="settings-page"></div>
+</div>
+
+<nav class="bottom-nav">
+  <button class="nav-btn active" id="nav-entry" onclick="showScreen('entry')">
+    <svg viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="9" y1="21" x2="9" y2="9"/></svg>
+    Entry
+  </button>
+  <button class="nav-btn" id="nav-summary" onclick="showScreen('summary')">
+    <svg viewBox="0 0 24 24"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
+    Summary
+  </button>
+  <button class="nav-btn" id="nav-settings" onclick="showScreen('settings')">
+    <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+    Settings
+  </button>
+</nav>
+
+<script>
+// ── Funding source definitions ────────────────────────────────────────────────
+const FUNDS = {
+  RES:   { id:'RES',   name:'Residential Street Rehab #40190',       short:'Res #40190',   cls:'fund-res',   pct:0.655314 },
+  EM:    { id:'EM',    name:'Emerald – Juanita to Lucia #41410',      short:'Emerald #41410', cls:'fund-em',  pct:0.104311 },
+  DEF:   { id:'DEF',  name:'Residential Deferred Maintenance #41300', short:'Def. Maint #41300', cls:'fund-def', pct:0.073283 },
+  ALLEY: { id:'ALLEY', name:'Alleyway Resurfacing #1370',             short:'Alley #1370',  cls:'fund-alley', pct:0.034982 },
+  TC:    { id:'TC',    name:'Traffic Calming',                        short:'Traffic Calming', cls:'fund-tc', pct:0.132110 },
+};
+
+// Funding allocation percentages per bid item (from Progress Payment Summary sheet)
+// Format: [RES%, EM%, DEF%, ALLEY%, TC%]
+const ALLOC = {
+  'B1':[0.6553142442,0.1043110438,0.0732827662,0.0349818257,0.1321101201],
+  'B2':[1,0,0,0,0],'B3':[0.6553142442,0.1043110438,0.0732827662,0.0349818257,0.1321101201],
+  'B4':[0.6553142442,0.1043110438,0.0732827662,0.0349818257,0.1321101201],
+  'B5':[1,0,0,0,0],'B6':[1,0,0,0,0],'B7':[1,0,0,0,0],'B8':[1,0,0,0,0],
+  'B9':[0,0,0,0,1],'B10':[0,0,0,0,1],
+  'B11':[1,0,0,0,0],'B12':[1,0,0,0,0],'B13':[1,0,0,0,0],
+  'B14':[1,0,0,0,0],'B15':[1,0,0,0,0],'B16':[1,0,0,0,0],'B17':[1,0,0,0,0],
+  'B18':[0.1376681811,0,0.2604914175,0,0.6018404014],
+  'B19':[0,0.7696806118,0.1309041835,0,0.0994152047],
+  'B20':[0.5663841808,0,0.2697740113,0,0.1638418079],
+  'B21':[0,0,0,1,0],'B22':[0,0,0,1,0],
+  'B23':[0.9260928729,0,0.0739071271,0,0],
+  'B24':[0,0.6635242202,0,0,0.3364757798],
+  'B25':[1,0,0,0,0],'B26':[0.7774798928,0,0,0,0.2225201072],
+  'B27':[1,0,0,0,0],'B28':[1,0,0,0,0],'B29':[1,0,0,0,0],
+  'B30':[0,1,0,0,0],'B31':[1,0,0,0,0],
+  'B32':[0.3853986439,0.6146013561,0,0,0],
+  'B33':[1,0,0,0,0],'B34':[1,0,0,0,0],
+  'B35':[0.6982356166,0.0263109812,0.1685547232,0.1068986791,0],
+  'B36':[0.8634671999,0.0523801589,0.0576015109,0.0265511304,0],
+  'B37':[0.390900525,0,0.396554045,0.2125454301,0],
+  'B38':[0.8969922811,0,0.1030077189,0,0],
+  'B39':[0,0,0,0,1],
+  'B40':[0.8038652712,0.0221603774,0.1419649175,0.032009434,0],
+  'B41':[0.9207902644,0,0.054218149,0.0249915865,0],
+  'B42':[0.6340766285,0,0.2382343099,0.1276890616,0],
+  'B43':[0.2144606966,0.5205646841,0,0,0.2649746193],
+  'B44':[0,0,0,0,1],
+  'B45':[1,0,0,0,0],'B46':[1,0,0,0,0],'B47':[1,0,0,0,0],'B48':[1,0,0,0,0],
+  'B49':[1,0,0,0,0],'B50':[1,0,0,0,0],'B51':[1,0,0,0,0],'B52':[1,0,0,0,0],
+  'B53':[1,0,0,0,0],'B54':[1,0,0,0,0],'B55':[1,0,0,0,0],'B56':[1,0,0,0,0],
+  'B57':[1,0,0,0,0],'B58':[1,0,0,0,0],'B59':[1,0,0,0,0],'B60':[1,0,0,0,0],
+  'B61':[1,0,0,0,0],'B62':[1,0,0,0,0],'B63':[1,0,0,0,0],'B64':[1,0,0,0,0],
+  'B65':[1,0,0,0,0],'B66':[1,0,0,0,0],'B67':[1,0,0,0,0],'B68':[1,0,0,0,0],
+  'B69':[0,0,0,0,1],'B70':[0,0,0,0,1],'B71':[0,0,0,0,1],'B72':[0,0,0,0,1],
+  'B73':[0,0,0,0,1],'B74':[0,0,0,0,1],'B75':[0,0,0,0,1],'B76':[0,0,0,0,1],
+  'B77':[0,0,0,0,1],'B78':[0,0,0,0,1],'B79':[0,0,0,0,1],'B80':[0,0,0,0,1],
+  'B81':[0,0,0,0,1],'B82':[0,0,0,0,1],'B83':[0,0,0,0,1],
+  'A1':[1,0,0,0,0],'A2':[1,0,0,0,0],'A3':[1,0,0,0,0],
+};
+
+// ── Bid items ─────────────────────────────────────────────────────────────────
+const BID_ITEMS = [
+  {id:'B1',sec:'Base Bid',no:1,desc:"MOBILIZATION/DEMOBILZATION (NOT TO EXCEED 5% OF BID)",qty:1,unit:'LS',unitCost:150000},
+  {id:'B2',sec:'Base Bid',no:2,desc:"IMPLEMENTATION OF WATER POLLUTION CONTROL BMPS",qty:1,unit:'LS',unitCost:13620},
+  {id:'B3',sec:'Base Bid',no:3,desc:"TRAFFIC CONTROL (INCLUDING SIGNS AND CMS)",qty:1,unit:'LS',unitCost:234000},
+  {id:'B4',sec:'Base Bid',no:4,desc:"CONSTRUCTION SURVEY AND MONUMENTATION",qty:1,unit:'LS',unitCost:182000},
+  {id:'B5',sec:'Base Bid',no:5,desc:"COORDINATE UTILITY RELOCATION - WATER VALVE",qty:6,unit:'EA',unitCost:2000},
+  {id:'B6',sec:'Base Bid',no:6,desc:"COORDINATE UTILITY RELOCATION - FIRE HYDRANT",qty:4,unit:'EA',unitCost:2000},
+  {id:'B7',sec:'Base Bid',no:7,desc:"COORDINATE UTILITY RELOCATION - STORM DRAIN BOX",qty:1,unit:'EA',unitCost:2000},
+  {id:'B8',sec:'Base Bid',no:8,desc:"COORDINATE UTILITY RELOCATION - TRAFFIC SIGNAL BOX",qty:1,unit:'EA',unitCost:7000},
+  {id:'B9',sec:'Base Bid',no:9,desc:"COORDINATE UTILITY RELOCATION - STREET LIGHT AND POST",qty:2,unit:'EA',unitCost:3000},
+  {id:'B10',sec:'Base Bid',no:10,desc:"RELOCATE STREET LIGHTING",qty:1,unit:'LS',unitCost:36000},
+  {id:'B11',sec:'Base Bid',no:11,desc:"ADJUST GAS VALVE BOX AND COVER TO GRADE [REVOCABLE]",qty:17,unit:'EA',unitCost:950},
+  {id:'B12',sec:'Base Bid',no:12,desc:"ADJUST WATER VALVE BOX AND COVER TO GRADE",qty:81,unit:'EA',unitCost:950},
+  {id:'B13',sec:'Base Bid',no:13,desc:"ADJUST WATER METER BOX AND COVER TO GRADE",qty:1,unit:'EA',unitCost:840},
+  {id:'B14',sec:'Base Bid',no:14,desc:"ADJUST SANITARY SEWER MANHOLE FRAME AND COVER TO GRADE",qty:49,unit:'EA',unitCost:2000},
+  {id:'B15',sec:'Base Bid',no:15,desc:"ADJUST STORM DRAIN MANHOLE FRAME AND COVER TO GRADE",qty:8,unit:'EA',unitCost:2000},
+  {id:'B16',sec:'Base Bid',no:16,desc:"ADJUST ELECTRICAL MANHOLE FRAME AND COVER TO GRADE [REVOCABLE]",qty:1,unit:'EA',unitCost:3200},
+  {id:'B17',sec:'Base Bid',no:17,desc:"ADJUST TELECOMM MANHOLE FRAME AND COVER TO GRADE [REVOCABLE]",qty:1,unit:'EA',unitCost:3122},
+  {id:'B18',sec:'Base Bid',no:18,desc:"REMOVE EXISTING CURB AND GUTTER AND RECONSTRUCT PER SPPWC STD. PLAN 120-3 (A2)",qty:909,unit:'LF',unitCost:74},
+  {id:'B19',sec:'Base Bid',no:19,desc:'REMOVE EXISTING CROSS GUTTER AND RECONSTRUCT PER SPPWC STD. PLAN 122-3 (8" DEPTH)',qty:4446,unit:'SF',unitCost:20},
+  {id:'B20',sec:'Base Bid',no:20,desc:"REMOVE EXISTING DRIVEWAY APRON AND RECONSTRUCT PER SPPWC STD. PLAN 110-2 (TYPE C)",qty:708,unit:'SF',unitCost:30},
+  {id:'B21',sec:'Base Bid',no:21,desc:"REMOVE EXISTING ALLEY ENTRANCE AND RECONSTRUCT PER SPPWC STD. PLAN 130-3",qty:288,unit:'SF',unitCost:35},
+  {id:'B22',sec:'Base Bid',no:22,desc:"REMOVE EXISTING ALLEY ENTRANCE AND RECONSTRUCT PER SPPWC STD. PLAN 130-3 INCLUDING DETECTABLE WARNING SURFACES",qty:1014,unit:'SF',unitCost:23},
+  {id:'B23',sec:'Base Bid',no:23,desc:"REMOVE EXISTING IMPROVEMENTS AND INSTALL ADA CURB RAMP PER SPPWC STD. PLAN 111-5",qty:11758,unit:'SF',unitCost:25},
+  {id:'B24',sec:'Base Bid',no:24,desc:"REMOVE EXISTING IMPROVEMENTS AND INSTALL BULBOUT WITH ADA CURB RAMP PER SPPWC STD. PLAN 111-5",qty:9355,unit:'SF',unitCost:22},
+  {id:'B25',sec:'Base Bid',no:25,desc:"REMOVE EXISTING SIDEWALK UPLIFT AND RECONSTRUCT PER SPPWC STD. PLANS 112-2 AND 113-2",qty:1124,unit:'SF',unitCost:18},
+  {id:'B26',sec:'Base Bid',no:26,desc:'REMOVE EXISTING AC SIDEWALK AND CONSTRUCT 4" THICK SIDEWALK PER SPPWC STD. PLANS 112-2 AND 113-2 WITH HMA CONFORM AT BACK OF WALK',qty:373,unit:'SF',unitCost:26},
+  {id:'B27',sec:'Base Bid',no:27,desc:"SUBGRADE PREPARATION",qty:8886,unit:'SY',unitCost:8},
+  {id:'B28',sec:'Base Bid',no:28,desc:'SUBGRADE OVER-EXCAVATION AND REPLACEMENT WITH CMB (6" DEPTH) [REVOCABLE]',qty:147,unit:'CY',unitCost:225},
+  {id:'B29',sec:'Base Bid',no:29,desc:'REMOVE BASE (0.5" DEPTH)',qty:81,unit:'CY',unitCost:156},
+  {id:'B30',sec:'Base Bid',no:30,desc:'REMOVE BASE (8" DEPTH)',qty:210,unit:'CY',unitCost:156},
+  {id:'B31',sec:'Base Bid',no:31,desc:"UNCLASSIFIED EXCAVATION",qty:377,unit:'CY',unitCost:182},
+  {id:'B32',sec:'Base Bid',no:32,desc:"CRUSHED MISCELLANEOUS BASE",qty:267,unit:'TON',unitCost:106},
+  {id:'B33',sec:'Base Bid',no:33,desc:"WEDGE GRIND (6' WIDE)",qty:1736,unit:'LF',unitCost:14},
+  {id:'B34',sec:'Base Bid',no:34,desc:"CONFORM GRIND (20' LONG, FULL WIDTH)",qty:516,unit:'SY',unitCost:8},
+  {id:'B35',sec:'Base Bid',no:35,desc:'COLD MILL AC (1.5" DEPTH)',qty:21892,unit:'SY',unitCost:4},
+  {id:'B36',sec:'Base Bid',no:36,desc:'COLD MILL AC (2.0" DEPTH)',qty:18003,unit:'SY',unitCost:4.1},
+  {id:'B37',sec:'Base Bid',no:37,desc:'COLD MILL AC (2.5" DEPTH)',qty:7429,unit:'SY',unitCost:4.7},
+  {id:'B38',sec:'Base Bid',no:38,desc:'BASE REPAIR (6" DEPTH)',qty:3757,unit:'SF',unitCost:8.75},
+  {id:'B39',sec:'Base Bid',no:39,desc:'CONSTRUCT HMA FILL (LESS THAN 4.0" DEPTH)',qty:8,unit:'TON',unitCost:310},
+  {id:'B40',sec:'Base Bid',no:40,desc:'CONSTRUCT HMA OVERLAY (1.5" DEPTH)',qty:2120,unit:'TON',unitCost:146},
+  {id:'B41',sec:'Base Bid',no:41,desc:'CONSTRUCT HMA OVERLAY (2.0" DEPTH)',qty:2080,unit:'TON',unitCost:146},
+  {id:'B42',sec:'Base Bid',no:42,desc:'CONSTRUCT HMA OVERLAY (2.5" DEPTH)',qty:1681,unit:'TON',unitCost:150},
+  {id:'B43',sec:'Base Bid',no:43,desc:'CONSTRUCT HMA OVERLAY (4.0" DEPTH)',qty:394,unit:'TON',unitCost:173},
+  {id:'B44',sec:'Base Bid',no:44,desc:"CONSTRUCT HMA DRIVEWAY CONFORM",qty:984,unit:'SF',unitCost:60},
+  {id:'B45',sec:'Base Bid',no:45,desc:"THERMOPLASTIC STRIPING - DETAIL 1",qty:642,unit:'LF',unitCost:1.1},
+  {id:'B46',sec:'Base Bid',no:46,desc:"THERMOPLASTIC STRIPING - DETAIL 21",qty:4588,unit:'LF',unitCost:2.6},
+  {id:'B47',sec:'Base Bid',no:47,desc:"THERMOPLASTIC STRIPING - DETAIL 27B",qty:65,unit:'LF',unitCost:1.6},
+  {id:'B48',sec:'Base Bid',no:48,desc:"THERMOPLASTIC STRIPING - DETAIL 41",qty:36,unit:'LF',unitCost:6.8},
+  {id:'B49',sec:'Base Bid',no:49,desc:'THERMOPLASTIC STRIPING - 6" YELLOW STRIPE',qty:69,unit:'LF',unitCost:1.6},
+  {id:'B50',sec:'Base Bid',no:50,desc:"THERMOPLASTIC LIMIT LINE",qty:1693,unit:'LF',unitCost:5.6},
+  {id:'B51',sec:'Base Bid',no:51,desc:"THERMOPLASTIC WHITE CONTINENTAL CROSSWALK",qty:1140,unit:'SF',unitCost:5.6},
+  {id:'B52',sec:'Base Bid',no:52,desc:"THERMOPLASTIC YELLOW CONTINENTAL CROSSWALK",qty:5207,unit:'SF',unitCost:5.6},
+  {id:'B53',sec:'Base Bid',no:53,desc:'THERMOPLASTIC PAVEMENT MARKING - "STOP"',qty:2266,unit:'SF',unitCost:15.55},
+  {id:'B54',sec:'Base Bid',no:54,desc:'THERMOPLASTIC PAVEMENT MARKING - "SCHOOL"',qty:35,unit:'SF',unitCost:15.55},
+  {id:'B55',sec:'Base Bid',no:55,desc:"THERMOPLASTIC PAVEMENT MARKING - ARROW I-10",qty:504,unit:'SF',unitCost:8.3},
+  {id:'B56',sec:'Base Bid',no:56,desc:"THERMOPLASTIC PAVEMENT MARKING - ARROW IV",qty:15,unit:'SF',unitCost:8.3},
+  {id:'B57',sec:'Base Bid',no:57,desc:"THERMOPLASTIC PAVEMENT MARKING - ISA",qty:25,unit:'SF',unitCost:42.7},
+  {id:'B58',sec:'Base Bid',no:58,desc:'THERMOPLASTIC PAVEMENT MARKING - "EXIT ONLY DO NOT ENTER"',qty:10,unit:'SF',unitCost:225},
+  {id:'B59',sec:'Base Bid',no:59,desc:"FIRE HYDRANT BLUE MARKER",qty:29,unit:'EA',unitCost:30.5},
+  {id:'B60',sec:'Base Bid',no:60,desc:"RESTORE EXISTING CURB PAINT",qty:1,unit:'LS',unitCost:9300},
+  {id:'B61',sec:'Base Bid',no:61,desc:"REPLACE STREET NAME SIGN",qty:166,unit:'EA',unitCost:292},
+  {id:'B62',sec:'Base Bid',no:62,desc:"TELESPAR BREAKAWAY POST",qty:27,unit:'EA',unitCost:370},
+  {id:'B63',sec:'Base Bid',no:63,desc:"INSTALL POST EXTENSION ON EXISTING POST",qty:3,unit:'EA',unitCost:213},
+  {id:'B64',sec:'Base Bid',no:64,desc:"NO RIGHT TURN SIGN (R3-1)",qty:2,unit:'EA',unitCost:121},
+  {id:'B65',sec:'Base Bid',no:65,desc:"NO LEFT TURN SIGN (R3-2)",qty:2,unit:'EA',unitCost:121},
+  {id:'B66',sec:'Base Bid',no:66,desc:"DO NOT ENTER SIGN (R5-1)",qty:4,unit:'EA',unitCost:121},
+  {id:'B67',sec:'Base Bid',no:67,desc:"FLEXIBLE PAVEMENT DELINEATOR",qty:5,unit:'EA',unitCost:92},
+  {id:'B68',sec:'Base Bid',no:68,desc:"STEEL BOLLARD",qty:2,unit:'EA',unitCost:1500},
+  {id:'B69',sec:'Base Bid',no:69,desc:'1" COPPER WATER SERVICE',qty:2,unit:'EA',unitCost:26100},
+  {id:'B70',sec:'Base Bid',no:70,desc:'6" CONCRETE BAND',qty:47,unit:'LF',unitCost:53},
+  {id:'B71',sec:'Base Bid',no:71,desc:"FILTER FABRIC",qty:343,unit:'SF',unitCost:2.75},
+  {id:'B72',sec:'Base Bid',no:72,desc:'BOULDERS (24"-36")',qty:29,unit:'TON',unitCost:880},
+  {id:'B73',sec:'Base Bid',no:73,desc:'RIP RAP (6"-12")',qty:6,unit:'TON',unitCost:661},
+  {id:'B74',sec:'Base Bid',no:74,desc:'3/4" AGGREGATE',qty:4,unit:'TON',unitCost:572},
+  {id:'B75',sec:'Base Bid',no:75,desc:"METAL HEADER",qty:110,unit:'LF',unitCost:27},
+  {id:'B76',sec:'Base Bid',no:76,desc:"FINE GRADING",qty:1279,unit:'SF',unitCost:0.8},
+  {id:'B77',sec:'Base Bid',no:77,desc:"SOIL PREPARATION (INCLUDES AMENDMENTS)",qty:921,unit:'SF',unitCost:2.2},
+  {id:'B78',sec:'Base Bid',no:78,desc:"PLANTING - 1 GAL",qty:150,unit:'EA',unitCost:12.8},
+  {id:'B79',sec:'Base Bid',no:79,desc:"PLANTING - 5 GAL",qty:63,unit:'EA',unitCost:45},
+  {id:'B80',sec:'Base Bid',no:80,desc:'TREES (24" BOX, INCLUDES STAKING)',qty:3,unit:'EA',unitCost:640},
+  {id:'B81',sec:'Base Bid',no:81,desc:"ORGANIC WOOD MULCH",qty:921,unit:'SF',unitCost:2.8},
+  {id:'B82',sec:'Base Bid',no:82,desc:"PLANT ESTABLISHMENT PERIOD (90 DAYS)",qty:1,unit:'LS',unitCost:1850},
+  {id:'B83',sec:'Base Bid',no:83,desc:"AUTOMATIC IRRIGATION SYSTEM",qty:1,unit:'LS',unitCost:34270},
+  {id:'A1',sec:'Additive Bid',no:1,desc:'COLD MILL AC (1.5" DEPTH)',qty:1560,unit:'SY',unitCost:15},
+  {id:'A2',sec:'Additive Bid',no:2,desc:'CONSTRUCT HMA OVERLAY (1.5" DEPTH)',qty:145,unit:'TON',unitCost:207},
+  {id:'A3',sec:'Additive Bid',no:3,desc:"THERMOPLASTIC STRIPING - DETAIL 22",qty:208,unit:'LF',unitCost:25},
+];
+
+const PP_COUNT = 5;
+const PP_LABELS = ['PP01','PP02','PP03','PP04','PP05'];
+const SECTIONS = ['All','Base Bid','Additive Bid'];
+const LS_PREFIX = 'calmex_';
+
+// ── State ─────────────────────────────────────────────────────────────────────
+let curPP = 0, curSection = 'All';
+
+// ── Storage ───────────────────────────────────────────────────────────────────
+function lsKey(itemId, pp) { return `${LS_PREFIX}${itemId}_pp${pp}`; }
+function getVal(itemId, pp) { const v = localStorage.getItem(lsKey(itemId, pp)); return v !== null ? parseFloat(v) : null; }
+function setVal(itemId, pp, v) { const k = lsKey(itemId, pp); if (v === null || v === '' || isNaN(v)) localStorage.removeItem(k); else localStorage.setItem(k, v); }
+function getTotalInstalled(itemId) { let t = 0; for (let p = 0; p < PP_COUNT; p++) { const v = getVal(itemId, p); if (v !== null) t += v; } return t; }
+function getContractTotal(item) { return item.qty * item.unitCost; }
+
+let saveTimer;
+function flashSaved() {
+  const el = document.getElementById('save-pill');
+  el.className = 'save-pill saved'; el.textContent = 'Saved ✓';
+  clearTimeout(saveTimer);
+  saveTimer = setTimeout(() => { el.className = 'save-pill'; el.textContent = 'Auto-save on'; }, 2000);
+}
+
+// ── Fund label HTML ───────────────────────────────────────────────────────────
+function fundTag(itemId) {
+  const a = ALLOC[itemId] || [1,0,0,0,0];
+  const funds = Object.values(FUNDS);
+  const active = funds.filter((f,i) => a[i] > 0);
+  if (active.length === 0) return '';
+  if (active.length === 1) return `<span class="fund-tag ${active[0].cls}">${active[0].short}</span>`;
+  return `<span class="fund-tag fund-split">Split: ${active.map(f=>f.short).join(' / ')}</span>`;
+}
+
+// ── Render ────────────────────────────────────────────────────────────────────
+function renderAll() { renderPPStrip(); renderSectionStrip(); renderItems(); }
+
+function renderPPStrip() {
+  document.getElementById('pp-strip').innerHTML = PP_LABELS.map((lbl, i) => {
+    let total = 0;
+    BID_ITEMS.forEach(item => { const v = getVal(item.id, i); if (v !== null) total += v * item.unitCost; });
+    return `<button class="pp-chip${i===curPP?' active':''}" onclick="selectPP(${i})">
+      ${lbl}<span class="pp-sub">${total > 0 ? '$'+Math.round(total).toLocaleString() : 'No entries'}</span>
+    </button>`;
+  }).join('');
+}
+
+function renderSectionStrip() {
+  document.getElementById('section-strip').innerHTML = SECTIONS.map(s =>
+    `<button class="section-chip${s===curSection?' active':''}" onclick="selectSection('${s}')">${s}</button>`
+  ).join('');
+}
+
+function renderSummaryCards() {
+  const filtered = BID_ITEMS.filter(i => curSection === 'All' || i.sec === curSection);
+  let withEntry = 0, ppTotal = 0, contractTotal = 0;
+  filtered.forEach(item => {
+    const v = getVal(item.id, curPP);
+    if (v !== null) { withEntry++; ppTotal += v * item.unitCost; }
+    contractTotal += getContractTotal(item);
+  });
+  const totalInstalled = filtered.reduce((s, item) => s + getTotalInstalled(item.id) * item.unitCost, 0);
+  const pct = contractTotal > 0 ? Math.round(totalInstalled / contractTotal * 100) : 0;
+  document.getElementById('summary-row').innerHTML = `
+    <div class="s-card accent"><div class="lbl">This PP</div><div class="val">$${Math.round(ppTotal).toLocaleString()}</div></div>
+    <div class="s-card"><div class="lbl">Items</div><div class="val">${withEntry}/${filtered.length}</div></div>
+    <div class="s-card ${pct>=100?'success':pct>50?'warn':'accent'}"><div class="lbl">% Complete</div><div class="val">${pct}%</div></div>`;
+}
+
+function renderItems() {
+  renderSummaryCards();
+  const filtered = BID_ITEMS.filter(i => curSection === 'All' || i.sec === curSection);
+  let lastSec = null, html = '';
+  filtered.forEach(item => {
+    if (curSection === 'All' && item.sec !== lastSec) {
+      html += `<div class="section-header">${item.sec}</div>`;
+      lastSec = item.sec;
+    }
+    const ppVal = getVal(item.id, curPP);
+    const totalInstalled = getTotalInstalled(item.id);
+    const contractAmt = getContractTotal(item);
+    const remaining = Math.max(0, item.qty - totalInstalled);
+    const over = Math.max(0, totalInstalled - item.qty);
+    const pct = item.qty > 0 ? Math.min(100, Math.round(totalInstalled / item.qty * 100)) : 0;
+    const isDone = item.qty > 0 && totalInstalled >= item.qty;
+    const isOver = over > 0;
+    const hasEntry = ppVal !== null;
+    const ppAmt = ppVal !== null ? ppVal * item.unitCost : 0;
+
+    html += `<div class="item-card${hasEntry?' has-entry':''}${isDone&&!isOver?' is-done':''}${isOver?' is-over':''}" id="card-${item.id}">
+      <div class="item-top">
+        <span class="item-no">${item.sec==='Base Bid'?'B':'A'}${item.no}</span>
+        <span class="item-desc">${item.desc}
+          <span class="item-meta">${item.qty.toLocaleString()} ${item.unit} @ $${item.unitCost} = $${contractAmt.toLocaleString()}</span>
+          ${fundTag(item.id)}
+        </span>
+      </div>
+      <div class="item-input-row">
+        <span class="pp-input-label">${PP_LABELS[curPP]}</span>
+        <input type="number" min="0" inputmode="numeric" class="pp-big-input${hasEntry?' filled':''}${isOver?' over':''}"
+          value="${ppVal!==null?ppVal:''}" placeholder="0"
+          data-id="${item.id}" oninput="handleInput(this)">
+        <span class="contract-badge">/ ${item.qty.toLocaleString()}<br>${item.unit}</span>
+      </div>
+      ${item.qty>0?`<div class="prog-wrap"><div class="prog-fill${isOver?' over':isDone?' full':''}" id="bar-${item.id}" style="width:${pct}%"></div></div>`:''}
+      <div class="item-stats">
+        <div class="stat-cell"><span class="sl">PP Amount</span><span class="sv ${hasEntry?'partial':''}" id="ppamt-${item.id}">$${hasEntry?Math.round(ppAmt).toLocaleString():'0'}</span></div>
+        <div class="stat-cell"><span class="sl">Total Done</span><span class="sv ${isDone?'done':totalInstalled>0?'partial':''}" id="done-${item.id}">${totalInstalled.toLocaleString()}</span></div>
+        <div class="stat-cell"><span class="sl">Remaining</span><span class="sv ${isOver?'over':''}" id="rem-${item.id}">${isOver?'OVER +'+over.toLocaleString():remaining>0?remaining.toLocaleString():item.qty===0?'—':'✓'}</span></div>
+      </div>
+    </div>`;
+  });
+  document.getElementById('item-list').innerHTML = html;
+}
+
+function renderSummaryPage() {
+  // Per-PP totals
+  let ppHtml = '<div class="sum-section-hdr">Progress Payment Totals</div>';
+  ppHtml += '<div class="pp-summary-row">';
+  let grandTotal = 0;
+  PP_LABELS.forEach((lbl, i) => {
+    let ppAmt = 0;
+    BID_ITEMS.forEach(item => { const v = getVal(item.id, i); if (v !== null) ppAmt += v * item.unitCost; });
+    grandTotal += ppAmt;
+    ppHtml += `<div class="pp-mini-card${ppAmt>0?' has-data':''}">
+      <span class="pml">${lbl}</span>
+      <span class="pmv">$${ppAmt>0?Math.round(ppAmt/1000)+'k':'—'}</span>
+    </div>`;
+  });
+  ppHtml += `<div class="pp-mini-card has-data"><span class="pml">Total</span><span class="pmv">$${Math.round(grandTotal/1000)}k</span></div>`;
+  ppHtml += '</div>';
+
+  // Per-fund totals
+  let fundHtml = '<div class="sum-section-hdr">By Funding Source</div>';
+  const CONTRACT_TOTAL = 3477163.25;
+  Object.values(FUNDS).forEach((fund, fi) => {
+    let fundPaid = 0, fundContract = 0;
+    BID_ITEMS.forEach(item => {
+      const alloc = ALLOC[item.id] || [1,0,0,0,0];
+      const contractAmt = getContractTotal(item);
+      fundContract += contractAmt * alloc[fi];
+      const totalInst = getTotalInstalled(item.id);
+      fundPaid += totalInst * item.unitCost * alloc[fi];
+    });
+    const pct = fundContract > 0 ? Math.round(fundPaid / fundContract * 100) : 0;
+    fundHtml += `<div class="sum-fund-card">
+      <div class="sum-fund-name"><span class="fund-tag ${fund.cls}" style="margin-right:6px;">&nbsp;</span>${fund.name}</div>
+      <div class="sum-fund-row"><span class="lbl">Contract Allocation</span><span class="amt">$${Math.round(fundContract).toLocaleString()}</span></div>
+      <div class="sum-fund-row"><span class="lbl">Paid to Date</span><span class="amt ${pct>=100?'done':pct>0?'warn':''}">$${Math.round(fundPaid).toLocaleString()}</span></div>
+      <div class="sum-fund-row"><span class="lbl">Remaining</span><span class="amt">$${Math.round(fundContract-fundPaid).toLocaleString()}</span></div>
+      <div class="sum-fund-row"><span class="lbl">% Complete</span><span class="amt ${pct>=100?'done':''}">${pct}%</span></div>
+    </div>`;
+  });
+
+  document.getElementById('summary-page').innerHTML = ppHtml + fundHtml;
+}
+
+function renderSettingsPage() {
+  let bytes=0,count=0;
+  for(let k in localStorage){if(k.startsWith(LS_PREFIX)){bytes+=localStorage[k].length*2;count++;}}
+  document.getElementById('settings-page').innerHTML = `
+    <div class="set-section">
+      <div class="set-title">Export</div>
+      <div class="set-card">
+        <div class="set-row">
+          <div><div class="set-row-label">Export to Excel</div><div class="set-row-sub">Progress payment forms with funding breakdown by fund</div></div>
+          <button class="set-btn success" onclick="exportXLSX()">↓ Excel</button>
+        </div>
+        <div class="set-row">
+          <div><div class="set-row-label">Export backup</div><div class="set-row-sub">Save all entries as a JSON backup file</div></div>
+          <button class="set-btn" onclick="exportJSON()">Export</button>
+        </div>
+        <div class="set-row">
+          <div><div class="set-row-label">Import backup</div><div class="set-row-sub">Restore from a previously exported backup</div></div>
+          <button class="set-btn" onclick="document.getElementById('import-input').click()">Import</button>
+          <input type="file" id="import-input" accept=".json" style="display:none" onchange="importJSON(this)">
+        </div>
+      </div>
+    </div>
+    <div class="set-section">
+      <div class="set-title">Data</div>
+      <div class="set-card">
+        <div class="set-row">
+          <div><div class="set-row-label">Storage used</div><div class="set-row-sub">${count} entries · ${(bytes/1024).toFixed(1)} KB</div></div>
+        </div>
+        <div class="set-row">
+          <div><div class="set-row-label">Clear all data</div><div class="set-row-sub">Permanently delete all entries</div></div>
+          <button class="set-btn danger" onclick="clearAll()">Clear all</button>
+        </div>
+      </div>
+    </div>
+    <div class="set-section">
+      <div class="set-title">About</div>
+      <div class="set-card">
+        <div class="set-row">
+          <div>
+            <div class="set-row-label">Calmex Field Tracker</div>
+            <div class="set-row-sub">City of Redondo Beach · Residential Rehabilitation Cycle 2 Phase 5<br>86 bid items · 5 funding sources · 5 PP periods</div>
+          </div>
+        </div>
+      </div>
+    </div>`;
+}
+
+// ── Interactions ──────────────────────────────────────────────────────────────
+function selectPP(i) { curPP = i; renderAll(); }
+function selectSection(s) { curSection = s; renderSectionStrip(); renderItems(); }
+
+function handleInput(el) {
+  const id = el.dataset.id;
+  const val = el.value === '' ? null : parseFloat(el.value);
+  setVal(id, curPP, val);
+  el.classList.toggle('filled', val !== null && !isNaN(val));
+
+  const item = BID_ITEMS.find(i => i.id === id);
+  const totalInstalled = getTotalInstalled(id);
+  const remaining = Math.max(0, item.qty - totalInstalled);
+  const over = Math.max(0, totalInstalled - item.qty);
+  const pct = item.qty > 0 ? Math.min(100, Math.round(totalInstalled / item.qty * 100)) : 0;
+  const isDone = item.qty > 0 && totalInstalled >= item.qty;
+  const isOver = over > 0;
+  const ppAmt = val !== null ? val * item.unitCost : 0;
+
+  el.classList.toggle('over', isOver);
+  const card = document.getElementById(`card-${id}`);
+  if (card) {
+    card.classList.toggle('has-entry', val !== null && !isNaN(val));
+    card.classList.toggle('is-done', isDone && !isOver);
+    card.classList.toggle('is-over', isOver);
+  }
+  const bar = document.getElementById(`bar-${id}`);
+  if (bar) { bar.style.width = pct+'%'; bar.className = 'prog-fill'+(isOver?' over':isDone?' full':''); }
+  const doneEl = document.getElementById(`done-${id}`);
+  if (doneEl) { doneEl.textContent = totalInstalled.toLocaleString(); doneEl.className = 'sv'+(isDone?' done':totalInstalled>0?' partial':''); }
+  const remEl = document.getElementById(`rem-${id}`);
+  if (remEl) { remEl.textContent = isOver?'OVER +'+over.toLocaleString():remaining>0?remaining.toLocaleString():item.qty===0?'—':'✓'; remEl.className = 'sv'+(isOver?' over':''); }
+  const ppAmtEl = document.getElementById(`ppamt-${id}`);
+  if (ppAmtEl) { ppAmtEl.textContent = '$'+Math.round(ppAmt).toLocaleString(); ppAmtEl.className = 'sv'+(val!==null&&!isNaN(val)?'partial':''); }
+
+  renderSummaryCards();
+  renderPPStrip();
+  flashSaved();
+}
+
+function showScreen(name) {
+  ['entry','summary','settings'].forEach(s => {
+    document.getElementById('screen-'+s).classList.toggle('active', s===name);
+    document.getElementById('nav-'+s).classList.toggle('active', s===name);
+  });
+  if (name==='summary') renderSummaryPage();
+  if (name==='settings') renderSettingsPage();
+}
+
+// ── Export JSON backup ────────────────────────────────────────────────────────
+function exportJSON() {
+  const data = {};
+  for (let k in localStorage) { if (k.startsWith(LS_PREFIX)) data[k.replace(LS_PREFIX,'')] = localStorage[k]; }
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([JSON.stringify(data,null,2)],{type:'application/json'}));
+  a.download = `calmex_backup_${new Date().toISOString().slice(0,10)}.json`;
+  a.click();
+}
+function importJSON(input) {
+  const reader = new FileReader();
+  reader.onload = e => {
+    try {
+      const data = JSON.parse(e.target.result); let count=0;
+      for (let k in data) { localStorage.setItem(LS_PREFIX+k, data[k]); count++; }
+      alert(`Imported ${count} entries.`); renderAll();
+    } catch { alert('Import failed — invalid file.'); }
+  };
+  reader.readAsText(input.files[0]); input.value='';
+}
+function clearAll() {
+  if (!confirm('Delete ALL tracking data? This cannot be undone.')) return;
+  Object.keys(localStorage).filter(k=>k.startsWith(LS_PREFIX)).forEach(k=>localStorage.removeItem(k));
+  renderAll(); renderSettingsPage();
+}
+
+// ── Export XLSX ───────────────────────────────────────────────────────────────
+function exportXLSX() {
+  if (typeof XLSX === 'undefined') { alert('Excel library not loaded — check internet connection.'); return; }
+  const wb = XLSX.utils.book_new();
+  const fundKeys = Object.keys(FUNDS);
+  const fundNames = Object.values(FUNDS).map(f=>f.name);
+
+  // ── Summary sheet ──
+  const sumRows = [
+    ['Calmex Engineering — Redondo Beach Residential Rehabilitation Cycle 2 Phase 5'],
+    ['Progress Payment Summary — Generated: '+new Date().toLocaleDateString()],
+    [],
+    ['Section','No.','Description','Unit','Contract Qty','Unit Cost','Contract Amount',
+     ...PP_LABELS.map(p=>p+' Qty'),
+     ...PP_LABELS.map(p=>p+' $'),
+     'Total Qty Installed','Total $ Paid','Remaining Qty','Remaining $','% Complete',
+     ...fundNames.map(f=>f+' Allocation'),
+     ...fundNames.map(f=>f+' Paid'),
+    ]
+  ];
+  BID_ITEMS.forEach(item => {
+    const contractAmt = getContractTotal(item);
+    const ppQtys = PP_LABELS.map((_,i) => { const v=getVal(item.id,i); return v!==null?v:''; });
+    const ppAmts = PP_LABELS.map((_,i) => { const v=getVal(item.id,i); return v!==null?Math.round(v*item.unitCost*100)/100:''; });
+    const totalInst = getTotalInstalled(item.id);
+    const totalPaid = Math.round(totalInst*item.unitCost*100)/100;
+    const remQty = Math.max(0, item.qty - totalInst);
+    const remAmt = Math.round(remQty*item.unitCost*100)/100;
+    const pct = item.qty>0?Math.round(totalInst/item.qty*100)/100:'';
+    const alloc = ALLOC[item.id]||[1,0,0,0,0];
+    const fundAllocs = alloc.map(a => Math.round(contractAmt*a*100)/100);
+    const fundPaids  = alloc.map(a => Math.round(totalPaid*a*100)/100);
+    sumRows.push([item.sec,item.no,item.desc,item.unit,item.qty,item.unitCost,contractAmt,
+      ...ppQtys,...ppAmts,totalInst,totalPaid,remQty,remAmt,pct,...fundAllocs,...fundPaids]);
+  });
+  const sumSheet = XLSX.utils.aoa_to_sheet(sumRows);
+  sumSheet['!cols'] = [{wch:12},{wch:5},{wch:55},{wch:6},{wch:12},{wch:10},{wch:14},
+    ...PP_LABELS.map(()=>({wch:10})),...PP_LABELS.map(()=>({wch:12})),
+    {wch:14},{wch:14},{wch:14},{wch:14},{wch:11},
+    ...fundNames.map(()=>({wch:16})),...fundNames.map(()=>({wch:16}))];
+  XLSX.utils.book_append_sheet(wb, sumSheet, 'Summary');
+
+  // ── One sheet per PP period ──
+  PP_LABELS.forEach((lbl, pi) => {
+    const rows = [
+      ['City of Redondo Beach'],
+      ['Residential Rehabilitation Cycle 2 Phase 5 Project'],
+      [`Progress Payment #${pi+1} — ${lbl}`],
+      [],
+      ['Section','Line Item','Description','Contract Qty','Unit','Unit Cost','Contract Amount',
+       'Qty This PP','Amount This PP','Total Qty to Date','Total $ to Date','Remaining Qty',
+       ...fundNames]
+    ];
+    let ppTotal=0, ppTotalAmt=0;
+    BID_ITEMS.forEach(item => {
+      const contractAmt = getContractTotal(item);
+      const v = getVal(item.id, pi);
+      const ppQty = v!==null?v:0;
+      const ppAmt = Math.round(ppQty*item.unitCost*100)/100;
+      ppTotal += ppQty; ppTotalAmt += ppAmt;
+      const totalInst = getTotalInstalled(item.id);
+      const totalAmt = Math.round(totalInst*item.unitCost*100)/100;
+      const remQty = Math.max(0, item.qty - totalInst);
+      const alloc = ALLOC[item.id]||[1,0,0,0,0];
+      const fundAmts = alloc.map(a => v!==null ? Math.round(ppAmt*a*100)/100 : '');
+      rows.push([item.sec,item.no,item.desc,item.qty,item.unit,item.unitCost,contractAmt,
+        v!==null?ppQty:'',v!==null?ppAmt:'',totalInst||'',totalAmt||'',remQty||'',...fundAmts]);
+    });
+    rows.push([]);
+    rows.push(['TOTALS','','','','','','',ppTotal,ppTotalAmt,'','','', ...fundNames.map((_,fi)=>{
+      let t=0;
+      BID_ITEMS.forEach(item=>{const v=getVal(item.id,pi);if(v!==null){const a=(ALLOC[item.id]||[1,0,0,0,0])[fi];t+=Math.round(v*item.unitCost*a*100)/100;}});
+      return t||'';
+    })]);
+    const ws = XLSX.utils.aoa_to_sheet(rows);
+    ws['!cols']=[{wch:12},{wch:6},{wch:52},{wch:12},{wch:6},{wch:10},{wch:14},{wch:10},{wch:14},{wch:14},{wch:14},{wch:12},...fundNames.map(()=>({wch:16}))];
+    XLSX.utils.book_append_sheet(wb, ws, lbl);
+  });
+
+  // ── Funding Summary sheet ──
+  const fsRows = [
+    ['Funding Source Summary'],
+    ['Generated: '+new Date().toLocaleDateString()],
+    [],
+    ['Funding Source','Contract Allocation',...PP_LABELS.map(p=>p+' Paid'),'Total Paid to Date','Remaining','% Complete']
+  ];
+  Object.values(FUNDS).forEach((fund,fi)=>{
+    const alloc = ALLOC;
+    let contractAlloc=0;
+    BID_ITEMS.forEach(item=>{ contractAlloc += getContractTotal(item)*(ALLOC[item.id]||[1,0,0,0,0])[fi]; });
+    const ppPaids = PP_LABELS.map((_,pi)=>{
+      let t=0;
+      BID_ITEMS.forEach(item=>{const v=getVal(item.id,pi);if(v!==null)t+=v*item.unitCost*(ALLOC[item.id]||[1,0,0,0,0])[fi];});
+      return Math.round(t*100)/100||'';
+    });
+    const totalPaid = ppPaids.reduce((s,v)=>s+(v||0),0);
+    const rem = Math.round((contractAlloc-totalPaid)*100)/100;
+    const pct = contractAlloc>0?Math.round(totalPaid/contractAlloc*100)/100:'';
+    fsRows.push([fund.name, Math.round(contractAlloc*100)/100, ...ppPaids, Math.round(totalPaid*100)/100, rem, pct]);
+  });
+  const fsSheet = XLSX.utils.aoa_to_sheet(fsRows);
+  fsSheet['!cols']=[{wch:40},{wch:16},...PP_LABELS.map(()=>({wch:14})),{wch:16},{wch:14},{wch:11}];
+  XLSX.utils.book_append_sheet(wb, fsSheet, 'Funding Summary');
+
+  XLSX.writeFile(wb, `Calmex_PP_Export_${new Date().toISOString().slice(0,10)}.xlsx`);
+}
+
+// ── Init ──────────────────────────────────────────────────────────────────────
+renderAll();
+</script>
+</body>
+</html>
