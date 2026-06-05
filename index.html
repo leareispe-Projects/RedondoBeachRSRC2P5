@@ -351,7 +351,7 @@ const LS_PREFIX = 'calmex_';
 let curPP = 0, curSection = 'All';
 
 // ── Google Drive config ───────────────────────────────────────────────────────
-const CLIENT_ID = '457654766599-9ct4lee263lfs3aaham992ntbmikkgmj.apps.googleusercontent.com';
+const CLIENT_ID = 'YOUR_GOOGLE_CLIENT_ID_HERE';
 const SCOPES = 'https://www.googleapis.com/auth/drive.file';
 const DATA_FILENAME = 'calmex_tracker_data.json';
 let tokenClient, accessToken = null, driveFileId = null;
@@ -364,7 +364,7 @@ function initAuth() {
     document.getElementById('auth-status').textContent = '⚠ No Client ID configured';
     document.getElementById('sign-in-btn').disabled = true; return;
   }
-  document.getElementById('auth-status').textContent = 'Ready';
+  document.getElementById('auth-status').textContent = 'Ready — tap Sign in to continue';
   gapi.load('client', async () => {
     await gapi.client.init({ discoveryDocs: ['https://www.googleapis.com/discovery/v1/apis/drive/v3/rest'] });
     tokenClient = google.accounts.oauth2.initTokenClient({
@@ -811,11 +811,17 @@ function exportXLSX() {
 // ── Init ──────────────────────────────────────────────────────────────────────
 window.onload = () => {
   const check = setInterval(() => {
-    if (typeof google !== 'undefined' && google.accounts) {
+    if (typeof google !== 'undefined' && google.accounts && typeof gapi !== 'undefined') {
       clearInterval(check); initAuth();
     }
-  }, 150);
-  setTimeout(() => { clearInterval(check); }, 8000);
+  }, 200);
+  setTimeout(() => {
+    clearInterval(check);
+    const status = document.getElementById('auth-status');
+    if (status && status.textContent === 'Loading...') {
+      status.textContent = 'Failed to load Google auth — check internet connection and refresh';
+    }
+  }, 10000);
 };
 </script>
 </body>
